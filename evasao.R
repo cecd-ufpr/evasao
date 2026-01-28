@@ -1,10 +1,11 @@
+library(gamlss)
 library(caret)
 library(caretEnsemble)
 library(tidyverse)
 library(kernelshap)
 library(shapviz)
 
-ev <- read.csv2("evasao.csv")
+ev <- read.csv2("evasao_toyexample.csv")
 ev$evasao <- as.factor(ev$evasao) #dropout variable
 ev$Area_the <- as.factor(ev$Area_the)
 ev$grau <- as.factor(ev$grau)
@@ -15,9 +16,37 @@ evadidos <- subset(ev, evasao == 1)
 n_evadidos <- subset(ev, evasao == 0)
 sorteio <- sample(1:nrow(n_evadidos), sum(ev$evasao==1))
 n_evadidos_sorteados <- n_evadidos[sorteio,]
-dados_balanceados <- rbind(evadidos, n_evadidos_sorteados)
+db <- rbind(evadidos, n_evadidos_sorteados)
 #-------------------------------------------------------------------------------
-# Comparative
+# Split train and test (70% train and 30% test)
+indice_treino <-  
+  createDataPartition(
+    y=db$evasao,
+    times=1, p=0.7, list=FALSE)
+
+treino = db[indice_treino, ]
+teste = db[-indice_treino, ]
+nrow(treino)
+nrow(teste)
+#-------------------------------------------------------------------------------
+# Only Logistic Regression
+mod<- gamlss(evasao ~ ira + Area_the + proprep + grau, data = treino, family = BI())
+summary(mod)
+
+# Prediction
+pred <- predict(mod, newdata = teste, type = "response")
+table(teste$evasao, pred > 0.5)
+prop.table(table(teste$evasao, pred > 0.5))
+
+# Metrics
+classe_prevista <- ifelse(pred > 0.5, 1, 0)
+classe_prevista<- as.factor(classe_prevista)
+confusao <- table(teste$evasao, classe_prevista)
+confusao_matrix<- confusionMatrix(confusao)
+confusao_matrix
+
+#-------------------------------------------------------------------------------
+# Comparative with other ML models
 dataset<- db[, c("evasao", "Area_the","ira","proprep","grau")]
 x <- dataset %>%
   mutate(Area_the = recode(Area_the, 
